@@ -1,0 +1,1 @@
+This is a event management system project made using mern stack.
