@@ -39,20 +39,36 @@ router.post('/register', async (req, res) => {
       role: role || 'user'
     });
 
+    // Admin accounts are considered verified by default
+    if (newUser.role === 'admin') newUser.verified = true;
+
     await newUser.save();
 
-  
-    req.session.userId = newUser._id;
-    req.session.username = newUser.username;
-    req.session.role = newUser.role;
+    // Do not auto-login regular users until verified by admin
+    if (newUser.role === 'admin') {
+      req.session.userId = newUser._id;
+      req.session.username = newUser.username;
+      req.session.role = newUser.role;
+      return res.status(201).json({
+        message: 'Admin user registered and logged in',
+        user: {
+          id: newUser._id,
+          username: newUser.username,
+          email: newUser.email,
+          role: newUser.role,
+          verified: newUser.verified
+        }
+      });
+    }
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User registered successfully. Awaiting admin verification.',
       user: {
         id: newUser._id,
         username: newUser.username,
         email: newUser.email,
-        role: newUser.role
+        role: newUser.role,
+        verified: newUser.verified
       }
     });
   } catch (error) {
@@ -83,6 +99,11 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid username or password' });
     }
 
+    // Only allow login if verified, except for admins
+    if (user.role !== 'admin' && !user.verified) {
+      return res.status(403).json({ message: 'Account not verified by admin' });
+    }
+
     req.session.userId = user._id;
     req.session.username = user.username;
     req.session.role = user.role;
@@ -93,7 +114,8 @@ router.post('/login', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role
+        role: user.role,
+        verified: user.verified
       }
     });
   } catch (error) {

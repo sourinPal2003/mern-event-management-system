@@ -9,6 +9,8 @@ const Maintenance = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [durations, setDurations] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -22,6 +24,7 @@ const Maintenance = () => {
 
   useEffect(() => {
     fetchDurations();
+    fetchUsers();
   }, []);
 
   const fetchDurations = async () => {
@@ -32,6 +35,18 @@ const Maintenance = () => {
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch durations');
       setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true);
+      const response = await axios.get(`${API_URL}/maintenance/users`, { withCredentials: true });
+      setUsers(response.data);
+    } catch (err) {
+      // ignore silently, admins will see durations first
+    } finally {
+      setUsersLoading(false);
     }
   };
 
@@ -234,7 +249,7 @@ const Maintenance = () => {
             <p className="text-gray-500">Loading durations...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {durations.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <p className="text-gray-500 mb-4">No membership durations found</p>
@@ -290,6 +305,60 @@ const Maintenance = () => {
             )}
           </div>
         )}
+        {/* Users management section */}
+        <div className="mt-12">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Users & Verification</h2>
+              <p className="text-gray-600 mt-1">Approve or revoke user verification</p>
+            </div>
+          </div>
+
+          {usersLoading ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Loading users...</p>
+            </div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No users found</div>
+          ) : (
+            <div className="bg-white rounded-lg shadow">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Username</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Role</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Verified</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u._id} className="border-b hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-700">{u.username}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{u.email}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{u.role}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!u.verified}
+                          onChange={async (e) => {
+                            const newVal = e.target.checked;
+                            try {
+                              await axios.put(`${API_URL}/maintenance/users/${u._id}/verify`, { verified: newVal }, { withCredentials: true });
+                              setUsers(prev => prev.map(x => x._id === u._id ? { ...x, verified: newVal } : x));
+                            } catch (err) {
+                              window.alert(err.response?.data?.message || 'Failed to update user');
+                            }
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

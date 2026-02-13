@@ -24,12 +24,13 @@ router.post('/add', isAuthenticated, async (req, res) => {
 
     // Get duration and price details
     const duration = await Maintenance.findById(durationId);
-    if (!duration || duration.type !== 'membership_duration') {
+    if (!duration || !duration.durationMonths) {
       return res.status(400).json({ message: 'Invalid duration selected' });
     }
+
     const startDate = new Date();
     const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + duration.durationMonths);
+    endDate.setMonth(endDate.getMonth() + Number(duration.durationMonths));
 
     const newMembership = new Membership({
       membershipNumber,
@@ -39,9 +40,10 @@ router.post('/add', isAuthenticated, async (req, res) => {
       phone,
       address,
       duration: `${duration.durationMonths} months`,
-      durationMonths: duration.durationMonths,
+      durationMonths: Number(duration.durationMonths),
       startDate,
-      endDate
+      endDate,
+      status: endDate < new Date() ? 'expired' : 'active'
     });
 
     await newMembership.save();
@@ -124,16 +126,23 @@ router.put('/update/:membershipNumber', isAuthenticated, async (req, res) => {
 
       // Get duration details
       const duration = await Maintenance.findById(durationId);
-      if (!duration || duration.type !== 'membership_duration') {
+      if (!duration || !duration.durationMonths) {
         return res.status(400).json({ message: 'Invalid duration selected' });
       }
 
-      const newEndDate = new Date(membership.endDate);
-      newEndDate.setMonth(newEndDate.getMonth() + duration.durationMonths);
+      const now = new Date();
+      // If membership has expired, extension starts from now, otherwise from current endDate
+      const baseDate = membership.endDate && new Date(membership.endDate) > now ? new Date(membership.endDate) : now;
+      const newEndDate = new Date(baseDate);
+      newEndDate.setMonth(newEndDate.getMonth() + Number(duration.durationMonths));
 
+      // Update membership: add months to existing durationMonths (cumulative)
       membership.endDate = newEndDate;
-      membership.duration = `${duration.durationMonths} months`;
-      membership.durationMonths = duration.durationMonths;
+      if (membership.status === 'expired') {
+        membership.startDate = now;
+      }
+      membership.durationMonths = Number(membership.durationMonths || 0) + Number(duration.durationMonths);
+      membership.duration = `${membership.durationMonths} months`;
       membership.status = 'active';
       await membership.save();
 

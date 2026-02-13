@@ -1,15 +1,16 @@
 import express from 'express';
 import Maintenance from '../models/Maintenance.js';
 import { isAdmin, isAuthenticated } from '../middleware/auth.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
-// ===== MEMBERSHIP DURATION ENDPOINTS (for admin to manage pricing) =====
+// ===== MEMBERSHIP DURATION ENDPOINTS =====
 
-// Get all membership durations (public or authenticated)
+// Get all membership durations
 router.get('/durations', isAuthenticated, async (req, res) => {
   try {
-    const durations = await Maintenance.find({ type: 'membership_duration' }).sort({ durationMonths: 1 });
+    const durations = await Maintenance.find().sort({ durationMonths: 1 });
     res.json(durations);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -21,7 +22,6 @@ router.post('/durations', isAdmin, async (req, res) => {
   try {
     const { durationMonths, price } = req.body;
 
-    // Validation
     if (!durationMonths || price === undefined) {
       return res.status(400).json({ message: 'Duration (in months) and price are required' });
     }
@@ -34,24 +34,13 @@ router.post('/durations', isAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Price cannot be negative' });
     }
 
-    // Check if duration already exists
-    const existing = await Maintenance.findOne({ type: 'membership_duration', durationMonths });
-    if (existing) {
-      return res.status(409).json({ message: 'This duration already exists' });
-    }
+    const existing = await Maintenance.findOne({ durationMonths });
+    if (existing) return res.status(409).json({ message: 'This duration already exists' });
 
-    const newDuration = new Maintenance({
-      type: 'membership_duration',
-      durationMonths,
-      price
-    });
-
+    const newDuration = new Maintenance({ durationMonths, price });
     await newDuration.save();
 
-    res.status(201).json({
-      message: 'Membership duration created successfully',
-      duration: newDuration
-    });
+    res.status(201).json({ message: 'Membership duration created successfully', duration: newDuration });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -63,47 +52,26 @@ router.put('/durations/:id', isAdmin, async (req, res) => {
     const { durationMonths, price } = req.body;
 
     let duration = await Maintenance.findById(req.params.id);
-
-    if (!duration) {
-      return res.status(404).json({ message: 'Duration not found' });
-    }
-
-    if (duration.type !== 'membership_duration') {
-      return res.status(400).json({ message: 'This is not a membership duration record' });
-    }
+    if (!duration) return res.status(404).json({ message: 'Duration not found' });
 
     if (durationMonths !== undefined) {
-      if (durationMonths <= 0) {
-        return res.status(400).json({ message: 'Duration must be greater than 0' });
-      }
+      if (durationMonths <= 0) return res.status(400).json({ message: 'Duration must be greater than 0' });
 
-      // Check if new duration value already exists (except current record)
-      const existing = await Maintenance.findOne({
-        type: 'membership_duration',
-        durationMonths,
-        _id: { $ne: req.params.id }
-      });
-      if (existing) {
-        return res.status(409).json({ message: 'This duration value already exists' });
-      }
+      const existing = await Maintenance.findOne({ durationMonths, _id: { $ne: req.params.id } });
+      if (existing) return res.status(409).json({ message: 'This duration value already exists' });
 
       duration.durationMonths = durationMonths;
     }
 
     if (price !== undefined) {
-      if (price < 0) {
-        return res.status(400).json({ message: 'Price cannot be negative' });
-      }
+      if (price < 0) return res.status(400).json({ message: 'Price cannot be negative' });
       duration.price = price;
     }
 
     duration.updatedAt = Date.now();
     await duration.save();
 
-    res.json({
-      message: 'Membership duration updated successfully',
-      duration
-    });
+    res.json({ message: 'Membership duration updated successfully', duration });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -113,125 +81,43 @@ router.put('/durations/:id', isAdmin, async (req, res) => {
 router.delete('/durations/:id', isAdmin, async (req, res) => {
   try {
     const duration = await Maintenance.findByIdAndDelete(req.params.id);
-
-    if (!duration) {
-      return res.status(404).json({ message: 'Duration not found' });
-    }
-
-    if (duration.type !== 'membership_duration') {
-      return res.status(400).json({ message: 'This is not a membership duration record' });
-    }
-
+    if (!duration) return res.status(404).json({ message: 'Duration not found' });
     res.json({ message: 'Membership duration deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// ===== MAINTENANCE TASK ENDPOINTS =====
+// ===== USER VERIFICATION MANAGEMENT (admin only) =====
 
-// Create maintenance task (admin only)
-router.post('/create', isAdmin, async (req, res) => {
+// Get all users (admin only)
+router.get('/users', isAdmin, async (req, res) => {
   try {
-    const { title, description, category, priority, scheduledDate, cost, assignedTo } = req.body;
-
-    // Validation
-    if (!title || !description || !category || !scheduledDate) {
-      return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    const newMaintenance = new Maintenance({
-      type: 'maintenance',
-      title,
-      description,
-      category,
-      priority: priority || 'medium',
-      scheduledDate,
-      cost: cost || 0,
-      assignedTo: assignedTo || null,
-      status: 'pending'
-    });
-
-    await newMaintenance.save();
-
-    res.status(201).json({
-      message: 'Maintenance request created successfully',
-      maintenance: newMaintenance
-    });
+    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get all maintenance tasks
-router.get('/list', isAdmin, async (req, res) => {
+// Toggle user verification (admin only)
+router.put('/users/:id/verify', isAdmin, async (req, res) => {
   try {
-    const maintenance = await Maintenance.find({ type: 'maintenance' }).sort({ scheduledDate: 1 });
-    res.json(maintenance);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+    const { verified } = req.body;
+    if (typeof verified !== 'boolean') return res.status(400).json({ message: 'Invalid verified value' });
 
-// Get single maintenance task
-router.get('/get/:id', isAdmin, async (req, res) => {
-  try {
-    const maintenance = await Maintenance.findById(req.params.id);
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (!maintenance) {
-      return res.status(404).json({ message: 'Maintenance request not found' });
+    // Admin cannot be unverified
+    if (user.role === 'admin' && verified === false) {
+      return res.status(400).json({ message: 'Cannot change verification for admin' });
     }
 
-    res.json(maintenance);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+    user.verified = verified;
+    await user.save();
 
-// Update maintenance task
-router.put('/update/:id', isAdmin, async (req, res) => {
-  try {
-    const { title, description, category, priority, status, assignedTo, cost, scheduledDate, completionDate, notes } = req.body;
-
-    let maintenance = await Maintenance.findById(req.params.id);
-
-    if (!maintenance) {
-      return res.status(404).json({ message: 'Maintenance request not found' });
-    }
-
-    if (title) maintenance.title = title;
-    if (description) maintenance.description = description;
-    if (category) maintenance.category = category;
-    if (priority) maintenance.priority = priority;
-    if (status) maintenance.status = status;
-    if (assignedTo) maintenance.assignedTo = assignedTo;
-    if (cost !== undefined) maintenance.cost = cost;
-    if (scheduledDate) maintenance.scheduledDate = scheduledDate;
-    if (completionDate) maintenance.completionDate = completionDate;
-    if (notes) maintenance.notes = notes;
-
-    maintenance.updatedAt = Date.now();
-    await maintenance.save();
-
-    res.json({
-      message: 'Maintenance request updated successfully',
-      maintenance
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Delete maintenance task
-router.delete('/delete/:id', isAdmin, async (req, res) => {
-  try {
-    const maintenance = await Maintenance.findByIdAndDelete(req.params.id);
-
-    if (!maintenance) {
-      return res.status(404).json({ message: 'Maintenance request not found' });
-    }
-
-    res.json({ message: 'Maintenance request deleted successfully' });
+    res.json({ message: 'User verification updated', user: { id: user._id, username: user.username, email: user.email, role: user.role, verified: user.verified } });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -61,21 +61,30 @@ const membershipSchema = new mongoose.Schema({
 
 // Middleware to calculate endDate before saving
 membershipSchema.pre('validate', function(next) {
-  if (!this.endDate || this.isModified('duration') || this.isModified('startDate')) {
-    const start = new Date(this.startDate);
-    const end = new Date(start);
-    
-    if (this.duration === '6 months') {
-      end.setMonth(end.getMonth() + 6);
-    } else if (this.duration === '1 year') {
-      end.setFullYear(end.getFullYear() + 1);
-    } else if (this.duration === '2 years') {
-      end.setFullYear(end.getFullYear() + 2);
+  try {
+    const start = this.startDate ? new Date(this.startDate) : new Date();
+
+    // Recalculate endDate when missing or when durationMonths/startDate change
+    if (!this.endDate || this.isModified('durationMonths') || this.isModified('startDate')) {
+      const months = Number(this.durationMonths || 0);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + months);
+      this.endDate = end;
     }
-    
-    this.endDate = end;
+
+    // Update status based on endDate
+    const now = new Date();
+    if (this.endDate && new Date(this.endDate) < now) {
+      this.status = 'expired';
+    } else {
+      // don't override 'cancelled'
+      if (this.status !== 'cancelled') this.status = 'active';
+    }
+
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 export default mongoose.model('Membership', membershipSchema);
