@@ -11,6 +11,7 @@ import eventRoutes from './routes/events.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import reportsRoutes from './routes/reports.js';
 import transactionRoutes from './routes/transactions.js';
+import Membership from './models/Membership.js';
 
 dotenv.config();
 
@@ -70,4 +71,26 @@ app.use((error, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  // Run an initial expiration pass at startup
+  (async () => {
+    try {
+      const now = new Date();
+      const res = await Membership.updateMany({ endDate: { $lt: now }, status: { $ne: 'expired' } }, { $set: { status: 'expired' } });
+      if (res.modifiedCount > 0) console.log(`Expired ${res.modifiedCount} memberships on startup`);
+    } catch (err) {
+      console.error('Error running initial expiry job:', err.message || err);
+    }
+  })();
+
+  // Schedule periodic expiration check (every hour)
+  const EXPIRY_INTERVAL_MS = 1000 * 60 * 60; // 1 hour
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const res = await Membership.updateMany({ endDate: { $lt: now }, status: { $ne: 'expired' } }, { $set: { status: 'expired' } });
+      if (res.modifiedCount > 0) console.log(`Expired ${res.modifiedCount} memberships`);
+    } catch (err) {
+      console.error('Error running expiry job:', err.message || err);
+    }
+  }, EXPIRY_INTERVAL_MS);
 });
