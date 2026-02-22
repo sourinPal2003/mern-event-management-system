@@ -12,7 +12,7 @@ const UserVendorList = () => {
   const navigate = useNavigate();
 
   const categories = [
-    'Catering','Florist','Decoration','Lighting','Others'
+    'All','Catering','Florist','Decoration','Lighting','Others'
   ];
 
   useEffect(() => {
