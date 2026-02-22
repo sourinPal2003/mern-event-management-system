@@ -1,0 +1,110 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import API from '../../services/api.js';
+import { ADMIN } from '../../services/endpoints.js';
+import { toast } from 'react-toastify';
+
+const AddUserAdmin = () => {
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    phone: ''
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await API.post(ADMIN.USERS, form);
+      toast.success('User added successfully');
+      navigate('/admin/users');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg mx-auto">
+
+      <button
+        onClick={() => navigate('/admin/users')}
+        className="mb-6 text-sm text-blue-600"
+      >
+        Back to Users
+      </button>
+
+      <div className="border p-6 bg-white">
+
+        <h2 className="text-xl font-semibold mb-6">
+          Add User
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          <div>
+            <label className="block text-sm mb-1">Name</label>
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full border px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Email</label>
+            <input
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="w-full border px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Password</label>
+            <input
+              type="password"
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className="w-full border px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Phone</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="w-full border px-3 py-2 text-sm"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-black text-white py-2 text-sm"
+          >
+            {submitting ? 'Saving...' : 'Add User'}
+          </button>
+
+        </form>
+
+      </div>
+
+    </div>
+  );
+};
+
+export default AddUserAdmin;
